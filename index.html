@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi movilidad conecta (Demo)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- LeafletJS for Interactive Map -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .scanner-ring {
+            border-radius: 50%;
+            animation: scanner-zoom 2s infinite;
+            opacity: 0;
+        }
+        @keyframes scanner-zoom {
+            0% { transform: scale(0.5); opacity: 1; }
+            100% { transform: scale(1.5); opacity: 0; }
+        }
+        #map {
+            height: 256px; /* h-64 */
+            z-index: 10;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-4">
+    <!-- Filtro SVG para textura de ruido (opcional, lo mantengo sutil) -->
+    <svg class="absolute w-0 h-0">
+        <filter id="noise-filter">
+            <feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/>
+            <feComposite operator="in" in2="SourceAlpha" result="noisy"/>
+        </filter>
+    </svg>
+
+    <!-- Main container that simulates a phone -->
+    <div class="w-full max-w-sm h-[80vh] max-h-[900px] bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col relative border-4 border-gray-800">
+
+        <!-- Application Screens -->
+        <main class="flex-grow overflow-y-auto pb-20">
+            <!-- Screen: Home (Map) -->
+            <div id="screen-home" class="p-4 space-y-4">
+                <header class="flex justify-between items-center">
+                    <h1 class="text-xl font-bold text-gray-800">Mi movilidad conecta</h1>
+                    <i data-lucide="bell" class="text-gray-500"></i>
+                </header>
+
+                <!-- Tarjeta de Saldo y Puntos -->
+                <div class="bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl p-6 text-white shadow-lg flex flex-col justify-between h-56 relative overflow-hidden">
+                    <div class="absolute inset-0 opacity-[0.03]" style="filter: url(#noise-filter);"></div>
+                    <div class="flex justify-between items-start">
+                        <p class="font-bold text-lg text-white/90">Mi movilidad conecta</p>
+                        <i data-lucide="contactless-payment" class="w-7 h-7 text-white/90"></i>
+                    </div>
+                    <div class="mt-2">
+                        <p class="text-sm opacity-80">Saldo disponible</p>
+                        <p id="balance-amount" class="text-4xl font-bold tracking-tighter">$54.50</p>
+                        <p class="text-sm opacity-70 tracking-widest font-mono mt-1">**** **** **** 1234</p>
+                    </div>
+                    <div class="mt-2 flex justify-between items-end">
+                        <div>
+                            <p class="text-xs opacity-80">Usuario Demo</p>
+                            <p class="font-bold text-lg" id="points-total">125 pts</p>
+                        </div>
+                        <button id="recharge-btn" class="bg-white/20 hover:bg-white/30 text-white font-semibold py-2 px-4 rounded-full text-sm backdrop-blur-sm border border-white/30">+ Recargar</button>
+                    </div>
+                </div>
+
+                <div class="relative">
+                    <i data-lucide="search" class="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 z-20"></i>
+                    <input id="search-input" type="text" placeholder="¿A dónde vas?" class="w-full bg-gray-100 rounded-full py-3 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div id="map" class="bg-gray-200 rounded-2xl overflow-hidden shadow-md"></div>
+                <div>
+                    <h2 class="font-bold text-gray-700 mb-2">Favoritos</h2>
+                    <div class="flex space-x-4">
+                        <button class="flex-1 flex flex-col items-center bg-gray-100 p-3 rounded-xl hover:bg-gray-200 transition-colors">
+                            <i data-lucide="home" class="text-blue-500 mb-1"></i>
+                            <span class="text-sm">Casa</span>
+                        </button>
+                        <button class="flex-1 flex flex-col items-center bg-gray-100 p-3 rounded-xl hover:bg-gray-200 transition-colors">
+                             <i data-lucide="briefcase" class="text-purple-500 mb-1"></i>
+                            <span class="text-sm">Trabajo</span>
+                        </button>
+                        <button class="flex-1 flex flex-col items-center bg-gray-100 p-3 rounded-xl hover:bg-gray-200 transition-colors">
+                            <i data-lucide="plus" class="text-gray-500 mb-1"></i>
+                            <span class="text-sm">Añadir</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Screen: Routes (Updated) -->
+            <div id="screen-routes" class="p-4 hidden space-y-4">
+                <h1 class="text-xl font-bold text-gray-800 mb-4">Mis Rutas</h1>
+                
+                <!-- "In Development" Message Updated with Link -->
+                <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-lg">
+                    <div class="flex">
+                        <div class="flex-shrink-0">
+                            <i data-lucide="construction" class="h-5 w-5 text-yellow-600"></i>
+                        </div>
+                        <div class="ml-3">
+                            <p class="text-sm font-semibold text-yellow-800">Sección en Desarrollo</p>
+                            <p class="text-sm text-yellow-700 mt-1">
+                                ¡Estamos trabajando en esta función! Mientras tanto, te invitamos a visitar la app 
+                                <a href="http://cugdl-udg.github.io/Buslive/" target="_blank" rel="noopener noreferrer" class="font-semibold text-yellow-900 underline hover:text-yellow-700">
+                                    BusLive
+                                    <i data-lucide="external-link" class="inline-block h-4 w-4 ml-1"></i>
+                                </a> 
+                                para consultar rutas en tiempo real.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Original content (dimmed) -->
+                <div class="opacity-50">
+                    <div>
+                        <h2 class="font-semibold text-gray-700 mb-2">Viaje Actual</h2>
+                        <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
+                            <div class="flex items-center space-x-3">
+                                <div class="bg-blue-500 p-2 rounded-md"><i data-lucide="bus" class="text-white"></i></div>
+                                <div><p class="font-bold">T04-A hacia Centro</p><p class="text-sm text-gray-600">Estado: <span class="text-green-600 font-semibold">En movimiento</span></p></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <h2 class="font-semibold text-gray-700 mb-2">Rutas Favoritas</h2>
+                        <div class="space-y-2">
+                            <div class="bg-white rounded-lg p-3 shadow-sm border flex justify-between items-center">
+                                <div class="flex items-center space-x-3"><i data-lucide="bus-front" class="text-green-500"></i><div><p class="font-semibold">C123 - Zapopan</p><p class="text-sm text-gray-500">Más cercano: 5 min.</p></div></div><i data-lucide="chevron-right" class="text-gray-400"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Screen: Rewards -->
+            <div id="screen-rewards" class="p-4 hidden space-y-4">
+                <h1 class="text-xl font-bold text-gray-800">Recompensas</h1>
+                 <div class="bg-white rounded-lg p-4 text-center shadow-sm border">
+                     <i data-lucide="gift" class="mx-auto text-purple-500 w-12 h-12 mb-2"></i>
+                     <p class="font-bold text-2xl" id="rewards-points-total">125 Puntos</p>
+                     <p class="text-gray-500 mb-4">¡Sigue viajando para ganar más!</p>
+                 </div>
+                 <div>
+                    <h2 class="font-semibold text-gray-700 mb-2">Canjear Puntos</h2>
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="bg-white p-3 rounded-lg text-center border shadow-sm flex flex-col justify-between">
+                            <div><i data-lucide="coffee" class="mx-auto text-yellow-700 h-8 w-8 mb-1"></i><p class="font-semibold text-sm">Café gratis</p></div>
+                            <p class="text-xs text-gray-500 mt-1">250 pts</p>
+                        </div>
+                        <div class="bg-white p-3 rounded-lg text-center border shadow-sm flex flex-col justify-between">
+                            <div><i data-lucide="ticket" class="mx-auto text-red-500 h-8 w-8 mb-1"></i><p class="font-semibold text-sm">Viaje gratis</p></div>
+                            <p class="text-xs text-gray-500 mt-1">100 pts</p>
+                        </div>
+                        <div class="bg-white p-3 rounded-lg text-center border shadow-sm flex flex-col justify-between">
+                            <div><i data-lucide="film" class="mx-auto text-indigo-500 h-8 w-8 mb-1"></i><p class="font-semibold text-sm">Boleto de cine</p><p class="text-xs text-gray-400">(Cineforo / Cineteca)</p></div>
+                            <p class="text-xs text-gray-500 mt-1">350 pts</p>
+                        </div>
+                        <div class="bg-white p-3 rounded-lg text-center border shadow-sm flex flex-col justify-between">
+                            <div><i data-lucide="landmark" class="mx-auto text-teal-500 h-8 w-8 mb-1"></i><p class="font-semibold text-sm">Centros Culturales</p><p class="text-xs text-gray-400">(Ver convenios)</p></div>
+                            <p class="text-xs text-gray-500 mt-1">150 pts</p>
+                        </div>
+                    </div>
+                 </div>
+            </div>
+            
+            <!-- Screen: Profile -->
+            <div id="screen-profile" class="p-4 hidden">
+                 <h1 class="text-xl font-bold text-gray-800 mb-4">Perfil</h1>
+                 <div class="flex flex-col items-center space-y-2 mb-6">
+                     <img src="https://placehold.co/100x100/e0e0e0/333?text=USER" alt="Avatar de usuario" class="w-24 h-24 rounded-full border-4 border-white shadow-md">
+                     <p class="font-bold text-lg">Usuario Demo</p>
+                 </div>
+                 
+                 <div class="bg-blue-50 border-l-4 border-blue-500 text-blue-800 p-4 rounded-lg mb-6">
+                     <div class="flex">
+                         <div class="py-1"><i data-lucide="shield-check" class="w-6 h-6 mr-3"></i></div>
+                         <div>
+                             <p class="font-bold">Seguro de Viajero</p>
+                             <p class="text-sm">Tu póliza está <span class="font-bold text-green-600">ACTIVA</span>.</p>
+                         </div>
+                     </div>
+                 </div>
+
+                 <div class="space-y-2">
+                     <button class="w-full text-left flex items-center justify-between p-3 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"><span class="flex items-center space-x-3"><i data-lucide="settings" class="text-gray-600"></i><span>Configuración</span></span><i data-lucide="chevron-right" class="text-gray-40J0"></i></button>
+                     <button class="w-full text-left flex items-center justify-between p-3 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"><span class="flex items-center space-x-3"><i data-lucide="credit-card" class="text-gray-600"></i><span>Métodos de Pago</span></span><i data-lucide="chevron-right" class="text-gray-400"></i></button>
+                     <button data-screen="history" class="nav-btn-internal w-full text-left flex items-center justify-between p-3 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"><span class="flex items-center space-x-3"><i data-lucide="history" class="text-gray-600"></i><span>Historial de Viajes</span></span><i data-lucide="chevron-right" class="text-gray-400"></i></button>
+                     <button class="w-full text-left flex items-center space-x-3 p-3 bg-gray-100 rounded-lg mt-4 hover:bg-gray-200 transition-colors"><i data-lucide="log-out" class="text-red-500"></i><span>Cerrar Sesión</span></button>
+                 </div>
+            </div>
+
+            <!-- Screen: Travel History -->
+            <div id="screen-history" class="p-4 hidden">
+                <header class="flex items-center mb-4">
+                    <button id="back-to-profile-btn" class="p-2 mr-2 -ml-2 text-gray-600 hover:text-gray-900">
+                        <i data-lucide="arrow-left"></i>
+                    </button>
+                    <h1 class="text-xl font-bold text-gray-800">Historial de Viajes</h1>
+                </header>
+                <div id="history-list" class="space-y-3">
+                    <!-- History items will be injected here by JavaScript -->
+                </div>
+            </div>
+        </main>
+
+        <!-- Bottom Navigation -->
+        <nav class="absolute bottom-0 left-0 right-0 bg-white/80 backdrop-blur-sm border-t border-gray-200 flex justify-around items-center p-2">
+            <button data-screen="home" class="nav-btn flex flex-col items-center text-blue-600 w-16"><i data-lucide="map"></i><span class="text-xs font-medium">Inicio</span></button>
+            <button data-screen="routes" class="nav-btn flex flex-col items-center text-gray-500 w-16"><i data-lucide="bus-front"></i><span class="text-xs">Rutas</span></button>
+            <button id="scan-btn" class="w-16 h-16 bg-blue-600 text-white rounded-full flex items-center justify-center -mt-8 shadow-lg border-4 border-white active:scale-95 transition-transform"><i data-lucide="scan-line" class="w-8 h-8"></i></button>
+            <button data-screen="rewards" class="nav-btn flex flex-col items-center text-gray-500 w-16"><i data-lucide="gift"></i><span class="text-xs">Premios</span></button>
+            <button data-screen="profile" class="nav-btn flex flex-col items-center text-gray-500 w-16"><i data-lucide="user-circle-2"></i><span class="text-xs">Perfil</span></button>
+        </nav>
+    </div>
+
+    <!-- Scan Options Modal -->
+    <div id="scan-options-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center p-4 hidden z-50">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-sm text-center transform transition-all scale-95 opacity-0" id="scan-options-content">
+            <h2 class="text-lg font-bold mb-4">Elige un método de pago</h2>
+            <div class="space-y-4">
+                <button id="nfc-option-btn" class="w-full bg-blue-100 text-blue-800 rounded-lg p-4 flex flex-col items-center justify-center hover:bg-blue-200 transition-colors">
+                    <i data-lucide="smartphone-nfc" class="w-12 h-12 mb-2"></i>
+                    <span class="font-semibold">Pagar con NFC</span>
+                    <span class="text-xs text-blue-600">Acerca tu teléfono</span>
+                </button>
+                <button id="qr-option-btn" class="w-full bg-gray-100 text-gray-800 rounded-lg p-4 flex flex-col items-center justify-center hover:bg-gray-200 transition-colors">
+                    <i data-lucide="qr-code" class="w-12 h-12 mb-2"></i>
+                    <span class="font-semibold">Mostrar mi QR</span>
+                    <span class="text-xs text-gray-600">Escanea tu código</span>
+                </button>
+            </div>
+            <button id="close-scan-options-modal" class="mt-6 text-gray-500 font-semibold">Cancelar</button>
+        </div>
+    </div>
+    
+    <!-- NFC Scanner Animation Modal -->
+    <div id="nfc-scanner-modal" class="fixed inset-0 bg-black/70 flex-col items-center justify-center backdrop-blur-sm hidden z-50">
+        <div id="scanning-state" class="flex flex-col items-center justify-center text-white">
+            <div class="relative w-48 h-48 flex items-center justify-center">
+                 <div class="scanner-ring absolute w-full h-full border-4 border-blue-400" style="animation-delay: 0s;"></div>
+                 <div class="scanner-ring absolute w-full h-full border-4 border-blue-400" style="animation-delay: 1s;"></div>
+                 <i data-lucide="smartphone-nfc" class="w-20 h-20 text-white"></i>
+            </div><p class="mt-8 text-lg font-semibold">Acerca tu teléfono al validador</p>
+        </div>
+        <div id="success-state" class="hidden flex-col items-center justify-center text-white">
+             <div class="w-48 h-48 bg-green-500 rounded-full flex items-center justify-center">
+                <i data-lucide="check" class="w-24 h-24 text-white"></i>
+             </div><p class="mt-8 text-2xl font-bold">¡Pago Exitoso!</p><p class="text-lg text-gray-300">-$9.50</p>
+        </div>
+    </div>
+
+    <!-- QR Code Modal -->
+    <div id="qr-code-modal" class="fixed inset-0 bg-gray-900 flex-col items-center justify-center p-4 hidden z-50 text-white">
+        <div class="text-center">
+            <h2 class="text-2xl font-bold mb-2">Tu QR de Viaje</h2>
+            <p class="text-gray-300 mb-6">Muestra este código en el lector del camión o estación.</p>
+            <div class="bg-white p-4 rounded-lg inline-block shadow-2xl">
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=MonederoGDL-UserID-12345-Demo" alt="User QR Code">
+            </div>
+            <div class="mt-4">
+                <p class="font-semibold">Usuario Demo</p>
+                <p class="text-sm text-gray-400">ID: ****-****-12345</p>
+            </div>
+        </div>
+        <button id="close-qr-modal" class="absolute bottom-10 bg-white/20 text-white font-semibold py-3 px-8 rounded-full hover:bg-white/30 transition-colors">Cerrar</button>
+    </div>
+
+    <!-- Recharge Modal -->
+    <div id="recharge-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center p-4 hidden z-50">
+        <div class="bg-white rounded-2xl p-6 w-full max-w-sm transform transition-all" id="recharge-modal-content">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-bold">Recargar Saldo</h2>
+                <button id="close-recharge-modal" class="text-gray-500 hover:text-gray-800 text-3xl leading-none">&times;</button>
+            </div>
+            
+            <div id="recharge-form">
+                <label class="font-semibold text-sm mb-2 blocindex
